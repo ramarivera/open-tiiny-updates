@@ -1,0 +1,42 @@
+# Reviewed setup candidate. Owner approved publication scope; root review is still required before applying.
+name: Publish reviewed Linux stable release
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Reviewed release tag holding the exact signed Linux x64 objects
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - name: Download the selected release objects
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq .immutable)" = true
+          mkdir -p site/stable/linux/x64
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir site/stable/linux/x64 --pattern '*.AppImage' --pattern signed-release.json --pattern latest-linux.yml
+          test "$(find site/stable/linux/x64 -type f | wc -l)" -eq 3
+          test "$(find site/stable/linux/x64 -name '*.AppImage' -type f | wc -l)" -eq 1
+          test "$(du -sb site | cut -f1)" -lt 1000000000
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
