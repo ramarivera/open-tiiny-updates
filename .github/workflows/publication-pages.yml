@@ -1,11 +1,15 @@
-# Reviewed setup candidate. Owner approved publication scope; root review is still required before applying.
-name: Publish reviewed Linux stable release
+name: Publish reviewed stable releases
 on:
   workflow_dispatch:
     inputs:
       release_tag:
         description: Reviewed release tag holding the exact signed Linux x64 objects
         required: true
+        type: string
+      macos_release_tag:
+        description: Reviewed immutable macOS arm64 release retained alongside Linux
+        required: true
+        default: macos-arm64-0.0.40
         type: string
 permissions:
   contents: read
@@ -24,16 +28,23 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
-      - name: Download the selected release objects
+      - name: Download the selected Linux and macOS release objects
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          MACOS_RELEASE_TAG: ${{ inputs.macos_release_tag }}
         run: |
           test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq .immutable)" = true
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$MACOS_RELEASE_TAG" --jq .immutable)" = true
           mkdir -p site/stable/linux/x64
+          mkdir -p site/stable/darwin/arm64
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir site/stable/linux/x64 --pattern '*.AppImage' --pattern signed-release.json --pattern latest-linux.yml
           test "$(find site/stable/linux/x64 -type f | wc -l)" -eq 3
           test "$(find site/stable/linux/x64 -name '*.AppImage' -type f | wc -l)" -eq 1
+          gh release download "$MACOS_RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir site/stable/darwin/arm64 --pattern '*.zip' --pattern '*.dmg' --pattern signed-release.json --pattern latest-mac.yml
+          test "$(find site/stable/darwin/arm64 -type f | wc -l)" -eq 4
+          test "$(find site/stable/darwin/arm64 -name '*.zip' -type f | wc -l)" -eq 1
+          test "$(find site/stable/darwin/arm64 -name '*.dmg' -type f | wc -l)" -eq 1
           test "$(du -sb site | cut -f1)" -lt 1000000000
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
